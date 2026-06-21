@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 
 const navLinks = [
   { href: '/musica', label: 'Música' },
+  { href: '/beats', label: 'Beats' },
   { href: '/eventos', label: 'Eventos' },
   { href: '/bio', label: 'Bio' },
   { href: '/comunidad', label: 'Comunidad' },
