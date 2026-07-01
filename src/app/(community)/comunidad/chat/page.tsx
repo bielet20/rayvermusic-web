@@ -27,7 +27,8 @@ export default async function ChatPage() {
   return (
     <ChatClient
       rooms={rooms ?? []}
-      initialMessages={initialMessages ?? []}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      initialMessages={(initialMessages ?? []) as any[]}
       defaultRoomId={defaultRoom?.id ?? ''}
       currentUser={{ id: user!.id, display_name: profile?.display_name ?? null, role: profile?.role ?? 'fan' }}
     />

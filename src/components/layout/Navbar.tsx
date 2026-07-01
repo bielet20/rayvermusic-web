@@ -9,10 +9,10 @@ import { cn } from '@/lib/utils'
 const navLinks = [
   { href: '/musica', label: 'Música' },
   { href: '/eventos', label: 'Eventos' },
+  { href: '/servicios', label: 'Servicios' },
   { href: '/bio', label: 'Bio' },
   { href: '/comunidad', label: 'Comunidad' },
   { href: '/gramola', label: 'Gramola' },
-  { href: '/contacto', label: 'Contacto' },
 ]
 
 export default function Navbar() {

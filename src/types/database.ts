@@ -51,6 +51,14 @@ export interface Database {
           youtube_url: string | null
           soundcloud_url: string | null
           beatport_url: string | null
+          genre: string | null
+          bpm: number | null
+          key_musical: string | null
+          tags: string[]
+          preview_url: string | null
+          download_url: string | null
+          label: string | null
+          plays_count: number
           is_featured: boolean
           is_published: boolean
           created_at: string
@@ -68,6 +76,14 @@ export interface Database {
           youtube_url?: string | null
           soundcloud_url?: string | null
           beatport_url?: string | null
+          genre?: string | null
+          bpm?: number | null
+          key_musical?: string | null
+          tags?: string[]
+          preview_url?: string | null
+          download_url?: string | null
+          label?: string | null
+          plays_count?: number
           is_featured?: boolean
           is_published?: boolean
         }
@@ -83,8 +99,47 @@ export interface Database {
           youtube_url?: string | null
           soundcloud_url?: string | null
           beatport_url?: string | null
+          genre?: string | null
+          bpm?: number | null
+          key_musical?: string | null
+          tags?: string[]
+          preview_url?: string | null
+          download_url?: string | null
+          label?: string | null
+          plays_count?: number
           is_featured?: boolean
           is_published?: boolean
+        }
+        Relationships: []
+      }
+      booking_requests: {
+        Row: {
+          id: string
+          name: string
+          email: string
+          service_type: 'dj_booking' | 'production' | 'remix' | 'mastering' | 'sync' | 'other'
+          event_date: string | null
+          venue: string | null
+          city: string | null
+          budget: string | null
+          message: string
+          status: 'pending' | 'contacted' | 'confirmed' | 'declined'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          email: string
+          service_type: 'dj_booking' | 'production' | 'remix' | 'mastering' | 'sync' | 'other'
+          event_date?: string | null
+          venue?: string | null
+          city?: string | null
+          budget?: string | null
+          message: string
+          status?: 'pending' | 'contacted' | 'confirmed' | 'declined'
+        }
+        Update: {
+          status?: 'pending' | 'contacted' | 'confirmed' | 'declined'
         }
         Relationships: []
       }
@@ -356,9 +411,64 @@ export interface Database {
         }
         Relationships: []
       }
+      playlists: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          cover_url: string | null
+          is_default: boolean
+          is_active: boolean
+          sort_by: 'custom' | 'newest' | 'featured' | 'plays'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          cover_url?: string | null
+          is_default?: boolean
+          is_active?: boolean
+          sort_by?: 'custom' | 'newest' | 'featured' | 'plays'
+        }
+        Update: {
+          name?: string
+          description?: string | null
+          cover_url?: string | null
+          is_default?: boolean
+          is_active?: boolean
+          sort_by?: 'custom' | 'newest' | 'featured' | 'plays'
+        }
+        Relationships: []
+      }
+      playlist_tracks: {
+        Row: {
+          id: string
+          playlist_id: string
+          release_id: string
+          position: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          playlist_id: string
+          release_id: string
+          position?: number
+        }
+        Update: {
+          position?: number
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      increment_release_plays: {
+        Args: { release_id: string }
+        Returns: void
+      }
+    }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
   }

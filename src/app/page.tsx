@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Navbar from '@/components/layout/Navbar'
 import Footer from '@/components/layout/Footer'
+import RecommendedWidget from '@/components/player/RecommendedWidget'
 import { ArrowRight, Music2, Zap, Calendar, Users, Radio, ChevronDown } from 'lucide-react'
 
 export default function HomePage() {
@@ -57,6 +58,9 @@ export default function HomePage() {
           <ChevronDown size={16} />
         </div>
       </section>
+
+      {/* MÚSICA RECOMENDADA */}
+      <RecommendedWidget />
 
       {/* FEATURES */}
       <section className="py-24 px-4">

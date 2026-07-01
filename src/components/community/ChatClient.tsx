@@ -50,7 +50,7 @@ export default function ChatClient({ rooms, initialMessages, defaultRoomId, curr
           .select('*, profiles(display_name, avatar_url, role)')
           .eq('id', payload.new.id)
           .single()
-        if (data) setMessages(prev => [...prev, data as Message])
+        if (data) setMessages(prev => [...prev, data as unknown as Message])
       })
       .subscribe()
 
@@ -79,7 +79,7 @@ export default function ChatClient({ rooms, initialMessages, defaultRoomId, curr
       .eq('room_id', roomId)
       .order('created_at', { ascending: true })
       .limit(50)
-    setMessages((data as Message[]) ?? [])
+    setMessages((data as unknown as Message[]) ?? [])
   }
 
   return (
