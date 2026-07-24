@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { Menu, X, Music2, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { usePlayerStore } from '@/lib/player-store'
 
 const navLinks = [
   { href: '/musica', label: 'Música' },
@@ -18,9 +19,13 @@ const navLinks = [
 export default function Navbar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  const hasPlayer = usePlayerStore(s => s.playlist.length > 0)
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-[var(--border)] bg-[var(--background)]/80 backdrop-blur-md">
+    <header className={cn(
+      'fixed left-0 right-0 z-50 border-b border-[var(--border)] bg-[var(--background)]/80 backdrop-blur-md transition-[top] duration-200',
+      hasPlayer ? 'top-[72px]' : 'top-0'
+    )}>
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 group" onClick={() => setOpen(false)}>

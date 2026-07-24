@@ -28,7 +28,7 @@ export default async function CommunityLayout({ children }: { children: React.Re
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
-      <aside className="fixed left-0 top-0 h-full w-60 border-r border-[var(--border)] bg-[var(--card)] flex flex-col z-40">
+      <aside className="fixed left-0 top-[72px] h-[calc(100vh-72px)] w-60 border-r border-[var(--border)] bg-[var(--card)] flex flex-col z-40">
         <div className="p-5 border-b border-[var(--border)]">
           <Link href="/" className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center">
@@ -69,7 +69,7 @@ export default async function CommunityLayout({ children }: { children: React.Re
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 ml-60 overflow-y-auto">
+      <main className="flex-1 ml-60 mt-[72px] overflow-y-auto">
         {children}
       </main>
     </div>

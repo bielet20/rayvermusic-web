@@ -35,6 +35,7 @@ interface PlayerState {
   shuffle: boolean
   repeat: RepeatMode
   isLoaded: boolean
+  isYtReady: boolean
   activePlatform: PlayerPlatform | null
   volume: number
 
@@ -51,6 +52,7 @@ interface PlayerState {
   addToQueue: (track: PlayerTrack) => void
   setActivePlatform: (p: PlayerPlatform | null) => void
   setVolume: (v: number) => void
+  setYtReady: (v: boolean) => void
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -60,13 +62,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlaying: false,
   isExpanded: false,
   shuffle: false,
-  repeat: 'none',
+  repeat: 'all',
   isLoaded: false,
+  isYtReady: false,
   activePlatform: null,
   volume: 80,
 
   loadPlaylist: (tracks, meta = null, startIndex = 0) => {
-    set({ playlist: tracks, meta, currentIndex: startIndex, isLoaded: true, isPlaying: false })
+    const idx = tracks.findIndex((t, i) => i >= startIndex && isPlayable(t))
+    set({ playlist: tracks, meta, currentIndex: idx >= 0 ? idx : startIndex, isLoaded: true, isPlaying: false, isYtReady: false })
   },
 
   playTrack: (index) => set({ currentIndex: index, isPlaying: true }),
@@ -77,18 +81,36 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   next: () => {
     const { playlist, currentIndex, shuffle, repeat } = get()
     if (!playlist.length) return
-    if (repeat === 'one') { set({ isPlaying: true }); return }
-    const nextIdx = shuffle
-      ? Math.floor(Math.random() * playlist.length)
-      : (currentIndex + 1) % playlist.length
-    if (!shuffle && nextIdx === 0 && repeat === 'none') { set({ isPlaying: false }); return }
-    set({ currentIndex: nextIdx, isPlaying: true })
+    if (repeat === 'one') {
+      set({ isPlaying: false })
+      setTimeout(() => set({ isPlaying: true }), 0)
+      return
+    }
+    if (shuffle) {
+      const playable = playlist
+        .map((t, i) => ({ t, i }))
+        .filter(({ t, i }) => i !== currentIndex && isPlayable(t))
+      if (!playable.length) { set({ isPlaying: false }); return }
+      const picked = playable[Math.floor(Math.random() * playable.length)]
+      set({ currentIndex: picked.i, isPlaying: true })
+      return
+    }
+    for (let step = 1; step <= playlist.length; step++) {
+      const idx = (currentIndex + step) % playlist.length
+      if (idx === 0 && repeat === 'none') { set({ isPlaying: false }); return }
+      if (isPlayable(playlist[idx])) { set({ currentIndex: idx, isPlaying: true }); return }
+    }
+    set({ isPlaying: false })
   },
 
   prev: () => {
     const { playlist, currentIndex } = get()
     if (!playlist.length) return
-    set({ currentIndex: currentIndex === 0 ? playlist.length - 1 : currentIndex - 1, isPlaying: true })
+    for (let step = 1; step <= playlist.length; step++) {
+      const idx = (currentIndex - step + playlist.length) % playlist.length
+      if (isPlayable(playlist[idx])) { set({ currentIndex: idx, isPlaying: true }); return }
+    }
+    set({ isPlaying: false })
   },
 
   toggleShuffle: () => set(s => ({ shuffle: !s.shuffle })),
@@ -100,9 +122,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   addToQueue: (track) => set(s => ({ playlist: [...s.playlist, track] })),
   setActivePlatform: (p) => set({ activePlatform: p }),
   setVolume: (v) => set({ volume: v }),
+  setYtReady: (v) => set({ isYtReady: v }),
 }))
 
 // Helpers
+export function isPlayable(track: PlayerTrack): boolean {
+  return !!(track.youtube_url || track.soundcloud_url)
+}
+
 export function getBestPlatform(track: PlayerTrack): { platform: PlayerPlatform; url: string } | null {
   if (track.youtube_url) return { platform: 'youtube', url: track.youtube_url }
   if (track.soundcloud_url) return { platform: 'soundcloud', url: track.soundcloud_url }
@@ -112,7 +139,7 @@ export function getBestPlatform(track: PlayerTrack): { platform: PlayerPlatform;
 }
 
 export function extractYouTubeId(url: string): string | null {
-  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/)
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|\/v\/)([A-Za-z0-9_-]{11})/)
   return m?.[1] ?? null
 }
 

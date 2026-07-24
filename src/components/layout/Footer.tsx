@@ -22,15 +22,15 @@ export default function Footer() {
                 className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-colors text-xs font-bold">
                 Instagram
               </a>
-              <a href="https://soundcloud.com/rayvermusic" target="_blank" rel="noreferrer"
+              <a href="https://soundcloud.com/biel-rivero-sampol" target="_blank" rel="noreferrer"
                 className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-colors text-xs font-bold">
                 SoundCloud
               </a>
-              <a href="https://youtube.com/@rayvermusic" target="_blank" rel="noreferrer"
+              <a href="https://www.youtube.com/@rayvermusic" target="_blank" rel="noreferrer"
                 className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-colors text-xs font-bold">
                 YouTube
               </a>
-              <a href="https://open.spotify.com/artist/rayver" target="_blank" rel="noreferrer"
+              <a href="https://open.spotify.com/artist/0GmwWh84e70RNGNkYOwE6d" target="_blank" rel="noreferrer"
                 className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-colors text-xs font-bold">
                 Spotify
               </a>

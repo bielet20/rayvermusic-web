@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { usePlayerStore, getBestPlatform, PLATFORM_LABELS, PLATFORM_COLORS, type PlayerTrack, type PlayerPlatform } from '@/lib/player-store'
-import { Play, Pause, Music2, SkipForward, ListMusic } from 'lucide-react'
+import { Play, Pause, Music2, SkipForward, ListMusic, Loader2 } from 'lucide-react'
 
 function MiniTrack({ track, index, isActive, isPlaying, onPlay }: {
   track: PlayerTrack; index: number; isActive: boolean; isPlaying: boolean; onPlay: () => void
@@ -45,12 +45,14 @@ function MiniTrack({ track, index, isActive, isPlaying, onPlay }: {
 }
 
 export default function RecommendedWidget() {
-  const { playlist, meta, currentIndex, isPlaying, isLoaded, toggle, next, playTrack, setExpanded } = usePlayerStore()
+  const { playlist, meta, currentIndex, isPlaying, isLoaded, toggle, next, playTrack, setExpanded, isYtReady } = usePlayerStore()
 
   if (!isLoaded || !playlist.length) return null
 
   const current = playlist[currentIndex]
   const visible = playlist.slice(0, 6)
+  const isYtTrack = getBestPlatform(current)?.platform === 'youtube'
+  const isPlayerReady = !isYtTrack || isYtReady
 
   return (
     <section className="py-20 px-4">
@@ -98,9 +100,9 @@ export default function RecommendedWidget() {
               <div className="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
                 <button
                   onClick={toggle}
-                  className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-transform shadow-xl"
+                  className={`w-16 h-16 rounded-full bg-white text-black flex items-center justify-center transition-transform shadow-xl ${isPlayerReady ? 'hover:scale-105' : 'opacity-70 cursor-wait'}`}
                 >
-                  {isPlaying ? <Pause size={28} /> : <Play size={28} className="ml-1" />}
+                  {!isPlayerReady ? <Loader2 size={28} className="animate-spin" /> : isPlaying ? <Pause size={28} /> : <Play size={28} className="ml-1" />}
                 </button>
                 <button
                   onClick={next}
@@ -119,9 +121,9 @@ export default function RecommendedWidget() {
               </div>
               <button
                 onClick={toggle}
-                className="w-10 h-10 rounded-full bg-purple-600 text-white flex items-center justify-center hover:bg-purple-500 transition-colors flex-shrink-0"
+                className={`w-10 h-10 rounded-full bg-purple-600 text-white flex items-center justify-center transition-colors flex-shrink-0 ${isPlayerReady ? 'hover:bg-purple-500' : 'opacity-70 cursor-wait'}`}
               >
-                {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
+                {!isPlayerReady ? <Loader2 size={16} className="animate-spin" /> : isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
               </button>
             </div>
           </div>

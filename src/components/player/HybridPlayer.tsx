@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import {
   usePlayerStore,
   getBestPlatform,
@@ -14,7 +14,7 @@ import {
 } from '@/lib/player-store'
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
-  ChevronDown, Volume2, VolumeX, ListMusic, Music2,
+  ChevronDown, Volume2, VolumeX, ListMusic, Music2, Loader2, ExternalLink,
 } from 'lucide-react'
 
 declare global {
@@ -49,17 +49,20 @@ function YouTubeEngine({
   isPlaying,
   volume,
   onEnd,
-  onReady,
+  onReadyChange,
 }: {
   track: PlayerTrack | null
   isPlaying: boolean
   volume: number
   onEnd: () => void
-  onReady: () => void
+  onReadyChange: (ready: boolean) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<YTPlayer | null>(null)
   const readyRef = useRef(false)
+  const isPlayingRef = useRef(isPlaying)
+
+  useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
 
   const videoId = track?.youtube_url ? extractYouTubeId(track.youtube_url) : null
 
@@ -67,11 +70,16 @@ function YouTubeEngine({
     if (!containerRef.current || !videoId) return
     if (playerRef.current) { try { playerRef.current.destroy() } catch { /* noop */ } }
     readyRef.current = false
+    onReadyChange(false)
     playerRef.current = new window.YT.Player(containerRef.current, {
       videoId,
       playerVars: { autoplay: 0, controls: 0, rel: 0, modestbranding: 1 },
       events: {
-        onReady: () => { readyRef.current = true; onReady() },
+        onReady: () => {
+          readyRef.current = true
+          onReadyChange(true)
+          if (isPlayingRef.current) playerRef.current?.playVideo()
+        },
         onStateChange: (e: { data: number }) => {
           if (e.data === window.YT.PlayerState.ENDED) onEnd()
         },
@@ -83,11 +91,13 @@ function YouTubeEngine({
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (window.YT) { initPlayer(); return }
-    const tag = document.createElement('script')
-    tag.src = 'https://www.youtube.com/iframe_api'
     const prev = window.onYouTubeIframeAPIReady
     window.onYouTubeIframeAPIReady = () => { prev?.(); initPlayer() }
-    document.head.appendChild(tag)
+    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+      const tag = document.createElement('script')
+      tag.src = 'https://www.youtube.com/iframe_api'
+      document.head.appendChild(tag)
+    }
     return () => { try { playerRef.current?.destroy() } catch { /* noop */ } }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -96,6 +106,7 @@ function YouTubeEngine({
     if (!window.YT || !videoId) return
     if (playerRef.current && readyRef.current) {
       playerRef.current.loadVideoById(videoId)
+      if (isPlayingRef.current) playerRef.current.playVideo()
     } else {
       initPlayer()
     }
@@ -125,13 +136,19 @@ function YouTubeEngine({
 function SoundCloudEngine({ track, isPlaying }: { track: PlayerTrack | null; isPlaying: boolean }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const widgetRef = useRef<SCWidget | null>(null)
+  const isPlayingRef = useRef(isPlaying)
   const url = track?.soundcloud_url ? getSoundCloudWidgetUrl(track.soundcloud_url) : null
+
+  useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
 
   useEffect(() => {
     if (!url || !iframeRef.current) return
     const setup = () => {
       if (!iframeRef.current || !window.SC) return
       widgetRef.current = window.SC.Widget(iframeRef.current)
+      widgetRef.current.bind('ready', () => {
+        if (isPlayingRef.current) widgetRef.current?.play()
+      })
     }
     if (window.SC) { setup(); return }
     const s = document.createElement('script')
@@ -227,15 +244,27 @@ function EmbedViewer({ track }: { track: PlayerTrack }) {
 export default function HybridPlayer() {
   const {
     playlist, meta, currentIndex, isPlaying, isExpanded, shuffle, repeat, volume,
-    toggle, next, prev, playTrack, toggleShuffle, cycleRepeat, setExpanded, setVolume,
+    toggle, next, prev, playTrack, toggleShuffle, cycleRepeat, setExpanded, setVolume, pause,
+    isYtReady, setYtReady,
   } = usePlayerStore()
-  const [, setYtReady] = useState(false)
 
   const current = playlist[currentIndex] ?? null
   const best = current ? getBestPlatform(current) : null
   const useYT = best?.platform === 'youtube'
   const useSC = best?.platform === 'soundcloud'
-  const showEmbed = !useYT && current && (current.spotify_url || current.soundcloud_url)
+  const isEmbedOnly = best !== null && (best.platform === 'spotify' || best.platform === 'apple')
+  // Only show embed viewer for platforms we can't control (Spotify/Apple), not SC which has its own engine
+  const showEmbed = isEmbedOnly && current && (current.spotify_url || current.soundcloud_url)
+
+  // Auto-skip tracks that can't be played natively (Spotify/Apple), only if player was active
+  const wasPlayingRef = useRef(false)
+  useEffect(() => { wasPlayingRef.current = isPlaying }, [isPlaying])
+
+  useEffect(() => {
+    if (!isEmbedOnly) return
+    if (wasPlayingRef.current) next()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex])
 
   if (!playlist.length || !current) return null
 
@@ -244,14 +273,14 @@ export default function HybridPlayer() {
       {useYT && (
         <YouTubeEngine
           track={current} isPlaying={isPlaying} volume={volume}
-          onEnd={next} onReady={() => setYtReady(true)}
+          onEnd={next} onReadyChange={setYtReady}
         />
       )}
       {useSC && <SoundCloudEngine track={current} isPlaying={isPlaying} />}
 
       {/* Expanded panel */}
       {isExpanded && (
-        <div className="fixed inset-x-0 bottom-[72px] z-40 flex flex-col border-t border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-xl shadow-2xl" style={{ maxHeight: '60vh' }}>
+        <div className="fixed inset-x-0 top-[72px] z-40 flex flex-col border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-xl shadow-2xl" style={{ maxHeight: '60vh' }}>
           <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border)] flex-shrink-0">
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-purple-400">{meta?.name ?? 'Playlist'}</p>
@@ -262,8 +291,25 @@ export default function HybridPlayer() {
             </button>
           </div>
 
-          {showEmbed && (
-            <div className="px-4 pt-3 pb-1 flex-shrink-0">
+          {showEmbed && best && (
+            <div className="px-4 pt-3 pb-3 flex-shrink-0 border-b border-[var(--border)]">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Solo disponible en{' '}
+                  <span className="font-semibold text-[var(--foreground)]">
+                    {PLATFORM_LABELS[best.platform as PlayerPlatform]}
+                  </span>
+                </p>
+                <a
+                  href={best.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-600 text-white hover:bg-purple-500 transition-colors"
+                >
+                  <ExternalLink size={11} />
+                  Abrir en {PLATFORM_LABELS[best.platform as PlayerPlatform]}
+                </a>
+              </div>
               <EmbedViewer track={current} />
             </div>
           )}
@@ -279,8 +325,8 @@ export default function HybridPlayer() {
         </div>
       )}
 
-      {/* Bottom bar */}
-      <div className="fixed bottom-0 inset-x-0 z-50 h-[72px] border-t border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-xl">
+      {/* Top bar */}
+      <div className="fixed top-0 inset-x-0 z-[60] h-[72px] border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto h-full px-4 flex items-center gap-3">
 
           {/* Track info */}
@@ -317,12 +363,28 @@ export default function HybridPlayer() {
             <button onClick={prev} className="p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
               <SkipBack size={18} />
             </button>
-            <button
-              onClick={toggle}
-              className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-transform shadow-lg flex-shrink-0"
-            >
-              {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
-            </button>
+            {isEmbedOnly && best ? (
+              <a
+                href={best.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setExpanded(true)}
+                title={`Abrir en ${PLATFORM_LABELS[best.platform as PlayerPlatform]}`}
+                className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-transform shadow-lg flex-shrink-0"
+              >
+                <ExternalLink size={16} />
+              </a>
+            ) : (
+              <button
+                onClick={toggle}
+                className={`w-10 h-10 rounded-full bg-white text-black flex items-center justify-center transition-transform shadow-lg flex-shrink-0 ${useYT && !isYtReady ? 'opacity-70 cursor-wait' : 'hover:scale-105'}`}
+              >
+                {useYT && !isYtReady
+                  ? <Loader2 size={18} className="animate-spin" />
+                  : isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />
+                }
+              </button>
+            )}
             <button onClick={next} className="p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
               <SkipForward size={18} />
             </button>

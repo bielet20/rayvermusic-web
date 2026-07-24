@@ -37,7 +37,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen flex bg-[var(--background)]">
-      <aside className="fixed left-0 top-0 h-full w-56 border-r border-[var(--border)] bg-[var(--card)] flex flex-col z-40">
+      <aside className="fixed left-0 top-[72px] h-[calc(100vh-72px)] w-56 border-r border-[var(--border)] bg-[var(--card)] flex flex-col z-40">
         <div className="p-4 border-b border-[var(--border)]">
           <Link href="/" className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center">
@@ -81,7 +81,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       </aside>
 
-      <main className="flex-1 ml-56 min-h-screen">
+      <main className="flex-1 ml-56 mt-[72px] min-h-[calc(100vh-72px)]">
         {children}
       </main>
     </div>
