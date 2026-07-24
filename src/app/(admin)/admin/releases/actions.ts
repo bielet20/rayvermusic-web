@@ -19,6 +19,7 @@ export async function createRelease(formData: FormData) {
     youtube_url: (formData.get('youtube_url') as string) || null,
     soundcloud_url: (formData.get('soundcloud_url') as string) || null,
     beatport_url: (formData.get('beatport_url') as string) || null,
+    audio_url: (formData.get('audio_url') as string) || null,
     is_featured: formData.get('is_featured') === 'on',
     is_published: formData.get('is_published') === 'on',
   }
@@ -43,6 +44,7 @@ export async function updateRelease(id: string, formData: FormData) {
     youtube_url: (formData.get('youtube_url') as string) || null,
     soundcloud_url: (formData.get('soundcloud_url') as string) || null,
     beatport_url: (formData.get('beatport_url') as string) || null,
+    audio_url: (formData.get('audio_url') as string) || null,
     is_featured: formData.get('is_featured') === 'on',
     is_published: formData.get('is_published') === 'on',
   }

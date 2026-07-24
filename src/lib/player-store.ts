@@ -1,12 +1,13 @@
 import { create } from 'zustand'
 
-export type PlayerPlatform = 'youtube' | 'spotify' | 'soundcloud' | 'apple'
+export type PlayerPlatform = 'direct' | 'youtube' | 'spotify' | 'soundcloud' | 'apple'
 
 export interface PlayerTrack {
   id: string
   title: string
   artist: string
   cover_url: string | null
+  audio_url: string | null
   youtube_url: string | null
   spotify_url: string | null
   soundcloud_url: string | null
@@ -127,10 +128,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
 // Helpers
 export function isPlayable(track: PlayerTrack): boolean {
-  return !!(track.youtube_url || track.soundcloud_url)
+  return !!(track.audio_url || track.youtube_url || track.soundcloud_url)
 }
 
 export function getBestPlatform(track: PlayerTrack): { platform: PlayerPlatform; url: string } | null {
+  if (track.audio_url) return { platform: 'direct', url: track.audio_url }
   if (track.youtube_url) return { platform: 'youtube', url: track.youtube_url }
   if (track.soundcloud_url) return { platform: 'soundcloud', url: track.soundcloud_url }
   if (track.spotify_url) return { platform: 'spotify', url: track.spotify_url }
@@ -154,6 +156,7 @@ export function getSoundCloudWidgetUrl(url: string): string {
 }
 
 export const PLATFORM_LABELS: Record<PlayerPlatform, string> = {
+  direct: 'Audio',
   youtube: 'YouTube',
   spotify: 'Spotify',
   soundcloud: 'SoundCloud',
@@ -161,6 +164,7 @@ export const PLATFORM_LABELS: Record<PlayerPlatform, string> = {
 }
 
 export const PLATFORM_COLORS: Record<PlayerPlatform, string> = {
+  direct: 'bg-purple-600/20 text-purple-400 border-purple-600/30',
   youtube: 'bg-red-600/20 text-red-400 border-red-600/30',
   spotify: 'bg-green-600/20 text-green-400 border-green-600/30',
   soundcloud: 'bg-orange-600/20 text-orange-400 border-orange-600/30',

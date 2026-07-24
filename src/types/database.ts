@@ -57,6 +57,7 @@ export interface Database {
           tags: string[]
           preview_url: string | null
           download_url: string | null
+          audio_url: string | null
           label: string | null
           plays_count: number
           is_featured: boolean
@@ -82,6 +83,7 @@ export interface Database {
           tags?: string[]
           preview_url?: string | null
           download_url?: string | null
+          audio_url?: string | null
           label?: string | null
           plays_count?: number
           is_featured?: boolean
@@ -105,6 +107,7 @@ export interface Database {
           tags?: string[]
           preview_url?: string | null
           download_url?: string | null
+          audio_url?: string | null
           label?: string | null
           plays_count?: number
           is_featured?: boolean

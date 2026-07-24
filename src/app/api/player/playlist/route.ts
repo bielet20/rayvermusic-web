@@ -26,7 +26,7 @@ export async function GET(request: Request) {
         position,
         releases (
           id, title, artist, cover_url, genre, type, bpm,
-          youtube_url, spotify_url, soundcloud_url, apple_url, beatport_url,
+          audio_url, youtube_url, spotify_url, soundcloud_url, apple_url, beatport_url,
           is_published
         )
       `)
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
   // Auto-playlists: sin playlist_tracks, desde releases directamente
   let relQuery = supabase
     .from('releases')
-    .select('id, title, artist, cover_url, genre, type, bpm, youtube_url, spotify_url, soundcloud_url, apple_url, beatport_url')
+    .select('id, title, artist, cover_url, genre, type, bpm, audio_url, youtube_url, spotify_url, soundcloud_url, apple_url, beatport_url')
     .eq('is_published', true)
 
   if (playlist.sort_by === 'featured') {

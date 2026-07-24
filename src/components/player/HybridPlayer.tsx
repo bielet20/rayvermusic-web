@@ -132,6 +132,43 @@ function YouTubeEngine({
   )
 }
 
+// ─── Direct Audio Engine ──────────────────────────────────────
+function AudioEngine({ track, isPlaying, volume, onEnd }: {
+  track: PlayerTrack | null
+  isPlaying: boolean
+  volume: number
+  onEnd: () => void
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const isPlayingRef = useRef(isPlaying)
+
+  useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
+
+  useEffect(() => {
+    if (!track?.audio_url) return
+    if (!audioRef.current) audioRef.current = new Audio()
+    const audio = audioRef.current
+    audio.src = track.audio_url
+    audio.volume = volume / 100
+    audio.onended = onEnd
+    if (isPlayingRef.current) audio.play().catch(() => {})
+    return () => { audio.pause() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [track?.audio_url])
+
+  useEffect(() => {
+    if (!audioRef.current) return
+    if (isPlaying) audioRef.current.play().catch(() => {})
+    else audioRef.current.pause()
+  }, [isPlaying])
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = volume / 100
+  }, [volume])
+
+  return null
+}
+
 // ─── SoundCloud Engine ────────────────────────────────────────
 function SoundCloudEngine({ track, isPlaying }: { track: PlayerTrack | null; isPlaying: boolean }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -250,6 +287,7 @@ export default function HybridPlayer() {
 
   const current = playlist[currentIndex] ?? null
   const best = current ? getBestPlatform(current) : null
+  const useDirect = best?.platform === 'direct'
   const useYT = best?.platform === 'youtube'
   const useSC = best?.platform === 'soundcloud'
   const isEmbedOnly = best !== null && (best.platform === 'spotify' || best.platform === 'apple')
@@ -270,6 +308,7 @@ export default function HybridPlayer() {
 
   return (
     <>
+      {useDirect && <AudioEngine track={current} isPlaying={isPlaying} volume={volume} onEnd={next} />}
       {useYT && (
         <YouTubeEngine
           track={current} isPlaying={isPlaying} volume={volume}
