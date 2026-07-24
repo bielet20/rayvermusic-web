@@ -9,6 +9,7 @@ import { usePlayerStore } from '@/lib/player-store'
 
 const navLinks = [
   { href: '/musica', label: 'Música' },
+  { href: '/beats', label: 'Beats' },
   { href: '/eventos', label: 'Eventos' },
   { href: '/servicios', label: 'Servicios' },
   { href: '/bio', label: 'Bio' },

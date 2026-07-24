@@ -2,9 +2,10 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Send, Mail, AtSign, Phone, CheckCircle, AlertCircle } from 'lucide-react'
+import { Send, Mail, AtSign, CheckCircle, AlertCircle } from 'lucide-react'
 
 const SERVICE_OPTIONS = [
+  { value: 'beats',        label: '🎵 Licencia de beat' },
   { value: 'dj_booking',  label: '🎧 DJ Booking / Actuación' },
   { value: 'production',  label: '🎛️ Producción musical' },
   { value: 'remix',       label: '🔄 Remix' },
@@ -24,7 +25,7 @@ const BUDGET_OPTIONS = [
 
 function ContactForm() {
   const searchParams = useSearchParams()
-  const preselected = searchParams.get('servicio') ?? 'dj_booking'
+  const preselected = searchParams.get('servicio') ?? searchParams.get('motivo') ?? 'dj_booking'
 
   const [form, setForm] = useState({
     name: '', email: '', service_type: preselected,
@@ -187,18 +188,20 @@ export default function ContactoPage() {
           Contacto profesional
         </div>
         <h1 className="text-4xl font-black mb-2">Hablemos</h1>
-        <p className="text-[var(--muted-foreground)]">Bookings, producciones, remixes, colaboraciones y prensa.</p>
+        <p className="text-[var(--muted-foreground)]">Beats, bookings, producciones, remixes, colaboraciones y prensa. Respondo en menos de 48&nbsp;h.</p>
       </div>
 
       <div className="grid md:grid-cols-5 gap-10">
         {/* Sidebar info */}
         <div className="md:col-span-2 space-y-7">
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Booking</h3>
-            <a href="mailto:booking@rayvermusic.com"
-              className="flex items-center gap-2 text-sm hover:text-purple-400 transition-colors">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Email</h3>
+            <a
+              href="mailto:forter2k17@gmail.com"
+              className="flex items-center gap-2 text-sm hover:text-purple-400 transition-colors"
+            >
               <Mail size={14} className="text-purple-400" />
-              booking@rayvermusic.com
+              forter2k17@gmail.com
             </a>
           </div>
 
@@ -207,8 +210,8 @@ export default function ContactoPage() {
             <div className="space-y-2">
               {[
                 { label: '@rayvermusic', href: 'https://instagram.com/rayvermusic', platform: 'Instagram' },
-                { label: '@rayvermusic', href: 'https://soundcloud.com/rayvermusic', platform: 'SoundCloud' },
-                { label: '@rayvermusic', href: 'https://youtube.com/@rayvermusic', platform: 'YouTube' },
+                { label: 'biel-rivero-sampol', href: 'https://soundcloud.com/biel-rivero-sampol', platform: 'SoundCloud' },
+                { label: '@rayvermusic', href: 'https://www.youtube.com/@rayvermusic', platform: 'YouTube' },
               ].map(s => (
                 <a key={s.platform} href={s.href} target="_blank" rel="noreferrer"
                   className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-purple-400 transition-colors">
@@ -218,6 +221,13 @@ export default function ContactoPage() {
                 </a>
               ))}
             </div>
+          </div>
+
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm text-[var(--muted-foreground)] leading-relaxed">
+            ¿Buscas un beat específico?{' '}
+            <a href="/beats" className="text-purple-400 hover:underline font-medium">
+              Explora el catálogo →
+            </a>
           </div>
 
           <div className="p-4 rounded-xl border border-purple-500/20 bg-purple-500/5">
@@ -231,6 +241,7 @@ export default function ContactoPage() {
           <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--card)]">
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">Servicios disponibles</p>
             <ul className="space-y-1 text-sm text-[var(--muted-foreground)]">
+              <li>🎵 Licencias de beats</li>
               <li>🎧 DJ Booking (clubs, festivales, privados)</li>
               <li>🎛️ Producción original y ghost production</li>
               <li>🔄 Remixes oficiales</li>
