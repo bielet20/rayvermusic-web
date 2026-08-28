@@ -531,6 +531,7 @@ export interface Database {
           current_period_start?: string | null
           current_period_end?: string | null
           cancel_at_period_end?: boolean
+          updated_at?: string
         }
         Update: {
           stripe_subscription_id?: string | null

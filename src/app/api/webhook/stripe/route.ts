@@ -1,10 +1,47 @@
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { createAdminClient } from '@/lib/supabase/server'
+import type { Plan } from '@/lib/features'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
 const resendKey = process.env.RESEND_API_KEY!
 const artistEmail = 'bielrivero@gmail.com'
+
+const PRICE_TO_PLAN: Record<string, Plan> = {
+  [process.env.STRIPE_PRO_PRICE_ID ?? '']: 'pro',
+  [process.env.STRIPE_ARTIST_PRICE_ID ?? '']: 'artist',
+  [process.env.STRIPE_LABEL_PRICE_ID ?? '']: 'label',
+  [process.env.STRIPE_PREMIUM_PRICE_ID ?? '']: 'pro',
+}
+
+type SubStatus = 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete'
+
+async function upsertSubscription({
+  userId, customerId, stripeSubId, priceId, plan, status, cancelAtEnd,
+}: {
+  userId: string; customerId: string | null; stripeSubId: string; priceId: string | null
+  plan: Plan; status: string; cancelAtEnd: boolean
+}) {
+  const supabase = await createAdminClient()
+  const validStatus: SubStatus = (['active', 'canceled', 'past_due', 'trialing', 'incomplete'] as const)
+    .includes(status as SubStatus) ? status as SubStatus : 'active'
+
+  await supabase.from('subscriptions').upsert({
+    user_id: userId,
+    stripe_subscription_id: stripeSubId,
+    stripe_price_id: priceId,
+    plan,
+    status: validStatus,
+    cancel_at_period_end: cancelAtEnd,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id' })
+
+  await supabase.from('profiles').update({
+    membership: plan,
+    ...(customerId ? { stripe_customer_id: customerId } : {}),
+  }).eq('id', userId)
+}
 
 export async function POST(request: Request) {
   const body = await request.text()
@@ -17,8 +54,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Webhook inválido' }, { status: 400 })
   }
 
+  // ─── Subscription: checkout completed ───────────────────────────────────────
   if (event.type === 'checkout.session.completed') {
-    const session = event.data.object as Stripe.CheckoutSession
+    const session = event.data.object as Stripe.Checkout.Session
+
+    if (session.mode === 'subscription') {
+      const userId = session.metadata?.user_id
+      const plan = (session.metadata?.plan ?? 'pro') as Plan
+      if (userId && session.subscription) {
+        const sub = await stripe.subscriptions.retrieve(session.subscription as string)
+        await upsertSubscription({
+          userId,
+          customerId: session.customer as string | null,
+          stripeSubId: sub.id,
+          priceId: sub.items.data[0]?.price?.id ?? null,
+          plan,
+          status: sub.status,
+          cancelAtEnd: sub.cancel_at_period_end,
+        })
+      }
+      return NextResponse.json({ received: true })
+    }
+
+    // Beat purchase (legacy path)
     const { beatTitle, licenseName, licenseType, beatId } = session.metadata ?? {}
     const customerEmail = session.customer_details?.email ?? ''
     const customerName = session.customer_details?.name ?? 'Cliente'
@@ -76,6 +134,40 @@ export async function POST(request: Request) {
         </div>
       `,
     })
+  }
+
+  // ─── Subscription: updated ──────────────────────────────────────────────────
+  if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.created') {
+    const sub = event.data.object as Stripe.Subscription
+    const userId = sub.metadata?.user_id
+    if (userId) {
+      const priceId = sub.items.data[0]?.price?.id ?? ''
+      const plan = PRICE_TO_PLAN[priceId] ?? 'pro'
+      await upsertSubscription({
+        userId,
+        customerId: sub.customer as string | null,
+        stripeSubId: sub.id,
+        priceId,
+        plan: sub.status === 'active' || sub.status === 'trialing' ? plan : 'free',
+        status: sub.status,
+        cancelAtEnd: sub.cancel_at_period_end,
+      })
+    }
+  }
+
+  // ─── Subscription: canceled / deleted ───────────────────────────────────────
+  if (event.type === 'customer.subscription.deleted') {
+    const sub = event.data.object as Stripe.Subscription
+    const userId = sub.metadata?.user_id
+    if (userId) {
+      const supabase = await createAdminClient()
+      await supabase.from('profiles').update({ membership: 'free' }).eq('id', userId)
+      await supabase.from('subscriptions').update({
+        plan: 'free',
+        status: 'canceled',
+        updated_at: new Date().toISOString(),
+      }).eq('user_id', userId)
+    }
   }
 
   return NextResponse.json({ received: true })

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { Menu, X, Music2, Zap } from 'lucide-react'
+import { Menu, X, Music2, Zap, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePlayerStore } from '@/lib/player-store'
 
@@ -58,6 +58,18 @@ export default function Navbar() {
 
         {/* CTA + mobile toggle */}
         <div className="flex items-center gap-3">
+          <Link
+            href="/cuenta"
+            className={cn(
+              'hidden sm:flex items-center justify-center w-8 h-8 rounded-full border transition-colors',
+              pathname.startsWith('/cuenta')
+                ? 'border-[var(--primary)] text-[var(--primary)]'
+                : 'border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--foreground)]'
+            )}
+            title="Mi cuenta"
+          >
+            <User size={14} />
+          </Link>
           <Link
             href="/comunidad"
             className="hidden sm:flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[var(--primary)] text-white text-sm font-semibold hover:opacity-90 transition-opacity glow-purple"
