@@ -3,7 +3,7 @@
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS public.playlists (
-  id           uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name         text NOT NULL,
   description  text,
   cover_url    text,
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.playlists (
 );
 
 CREATE TABLE IF NOT EXISTS public.playlist_tracks (
-  id          uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   playlist_id uuid NOT NULL REFERENCES public.playlists(id) ON DELETE CASCADE,
   release_id  uuid NOT NULL REFERENCES public.releases(id) ON DELETE CASCADE,
   position    int  NOT NULL DEFAULT 0,

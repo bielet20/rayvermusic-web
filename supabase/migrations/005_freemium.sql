@@ -7,7 +7,7 @@ ALTER TABLE public.profiles ADD CONSTRAINT profiles_membership_check
 
 -- 2. Platform OAuth connections (Spotify, SoundCloud, YouTube, Apple Music)
 CREATE TABLE public.platform_connections (
-  id             uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id        uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   platform       text NOT NULL CHECK (platform IN ('spotify', 'soundcloud', 'youtube', 'apple_music')),
   access_token   text,
@@ -29,7 +29,7 @@ CREATE POLICY "Users manage own connections" ON public.platform_connections
 
 -- 3. Stripe subscription tracking
 CREATE TABLE public.subscriptions (
-  id                    uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id               uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   stripe_subscription_id text UNIQUE,
   stripe_price_id       text,
@@ -51,7 +51,7 @@ CREATE POLICY "Users read own subscriptions" ON public.subscriptions
 
 -- 4. User-created playlists (separate from admin playlists table)
 CREATE TABLE public.user_playlists (
-  id              uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name            text NOT NULL,
   description     text,
@@ -72,7 +72,7 @@ CREATE POLICY "Public playlists visible to all" ON public.user_playlists
 
 -- 5. User playlist tracks (platform-agnostic — any source)
 CREATE TABLE public.user_playlist_tracks (
-  id          uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   playlist_id uuid NOT NULL REFERENCES public.user_playlists(id) ON DELETE CASCADE,
   position    integer NOT NULL DEFAULT 0,
   title       text NOT NULL,

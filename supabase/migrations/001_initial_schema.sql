@@ -3,7 +3,7 @@
 -- ============================================================
 
 -- Extensiones
-create extension if not exists "uuid-ossp";
+
 create extension if not exists "pgcrypto";
 
 -- ============================================================
@@ -44,7 +44,7 @@ create trigger on_auth_user_created
 -- RELEASES (Tracks, EPs, Álbumes)
 -- ============================================================
 create table public.releases (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   type        text not null default 'track' check (type in ('track', 'ep', 'album', 'remix')),
   title       text not null,
   artist      text not null default 'Rayver',
@@ -71,7 +71,7 @@ create policy "Admin gestiona releases" on public.releases for all using (
 -- EVENTOS
 -- ============================================================
 create table public.events (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   title       text not null,
   venue       text,
   city        text,
@@ -95,7 +95,7 @@ create policy "Admin gestiona eventos" on public.events for all using (
 -- CONTENIDO EXCLUSIVO (posts, tracks, videos para members)
 -- ============================================================
 create table public.exclusive_content (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   type        text not null default 'post' check (type in ('post', 'track', 'video', 'download')),
   title       text not null,
   body        text,
@@ -123,7 +123,7 @@ create policy "Admin gestiona contenido exclusivo" on public.exclusive_content f
 -- CHAT EN TIEMPO REAL
 -- ============================================================
 create table public.chat_rooms (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   name        text not null,
   description text,
   is_public   boolean not null default true,
@@ -131,7 +131,7 @@ create table public.chat_rooms (
 );
 
 create table public.chat_messages (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   room_id     uuid not null references public.chat_rooms(id) on delete cascade,
   user_id     uuid not null references public.profiles(id) on delete cascade,
   content     text not null,
@@ -155,7 +155,7 @@ insert into public.chat_rooms (name, description) values ('off-topic', 'Habla de
 -- VOTACIONES / POLLS
 -- ============================================================
 create table public.polls (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   question    text not null,
   description text,
   options     jsonb not null default '[]',
@@ -165,7 +165,7 @@ create table public.polls (
 );
 
 create table public.poll_votes (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   poll_id     uuid not null references public.polls(id) on delete cascade,
   user_id     uuid not null references public.profiles(id) on delete cascade,
   option_index int not null,
@@ -187,7 +187,7 @@ create policy "Votos visibles para autenticados" on public.poll_votes for select
 -- GRAMOLA / JUKEBOX
 -- ============================================================
 create table public.jukebox_tracks (
-  id              uuid primary key default uuid_generate_v4(),
+  id              uuid primary key default gen_random_uuid(),
   title           text not null,
   artist          text,
   source_url      text not null,
@@ -200,7 +200,7 @@ create table public.jukebox_tracks (
 );
 
 create table public.jukebox_queue (
-  id              uuid primary key default uuid_generate_v4(),
+  id              uuid primary key default gen_random_uuid(),
   track_id        uuid references public.jukebox_tracks(id) on delete set null,
   title           text not null,
   artist          text,
@@ -234,7 +234,7 @@ create policy "Admin gestiona tracks" on public.jukebox_tracks for all using (
 -- NEWSLETTER / SUSCRIPTORES
 -- ============================================================
 create table public.newsletter_subscribers (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   email       text unique not null,
   name        text,
   is_active   boolean not null default true,

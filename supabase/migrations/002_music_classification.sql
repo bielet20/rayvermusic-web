@@ -63,7 +63,7 @@ GRANT EXECUTE ON FUNCTION public.increment_release_plays(uuid) TO anon, authenti
 -- Servicios / Booking requests
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.booking_requests (
-  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name          text NOT NULL,
   email         text NOT NULL,
   service_type  text NOT NULL CHECK (service_type IN ('dj_booking', 'production', 'remix', 'mastering', 'sync', 'other')),
