@@ -8,12 +8,12 @@ import { cn } from '@/lib/utils'
 import { usePlayerStore } from '@/lib/player-store'
 
 const navLinks = [
+  { href: '/player', label: 'Player' },
   { href: '/musica', label: 'Música' },
   { href: '/beats', label: 'Beats' },
   { href: '/eventos', label: 'Eventos' },
   { href: '/servicios', label: 'Servicios' },
   { href: '/bio', label: 'Bio' },
-  { href: '/comunidad', label: 'Comunidad' },
   { href: '/gramola', label: 'Gramola' },
 ]
 

@@ -11,7 +11,7 @@ export interface Database {
           avatar_url: string | null
           bio: string | null
           role: 'fan' | 'artist' | 'admin'
-          membership: 'free' | 'premium'
+          membership: 'free' | 'pro' | 'artist' | 'label' | 'premium'
           stripe_customer_id: string | null
           created_at: string
           updated_at: string
@@ -23,7 +23,7 @@ export interface Database {
           avatar_url?: string | null
           bio?: string | null
           role?: 'fan' | 'artist' | 'admin'
-          membership?: 'free' | 'premium'
+          membership?: 'free' | 'pro' | 'artist' | 'label' | 'premium'
           stripe_customer_id?: string | null
         }
         Update: {
@@ -32,7 +32,7 @@ export interface Database {
           avatar_url?: string | null
           bio?: string | null
           role?: 'fan' | 'artist' | 'admin'
-          membership?: 'free' | 'premium'
+          membership?: 'free' | 'pro' | 'artist' | 'label' | 'premium'
           stripe_customer_id?: string | null
         }
         Relationships: []
@@ -461,6 +461,165 @@ export interface Database {
         }
         Update: {
           position?: number
+        }
+        Relationships: []
+      }
+      platform_connections: {
+        Row: {
+          id: string
+          user_id: string
+          platform: 'spotify' | 'soundcloud' | 'youtube' | 'apple_music'
+          access_token: string | null
+          refresh_token: string | null
+          token_expires_at: string | null
+          platform_user_id: string | null
+          platform_username: string | null
+          platform_display_name: string | null
+          platform_avatar_url: string | null
+          scopes: string[] | null
+          connected_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          platform: 'spotify' | 'soundcloud' | 'youtube' | 'apple_music'
+          access_token?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          platform_user_id?: string | null
+          platform_username?: string | null
+          platform_display_name?: string | null
+          platform_avatar_url?: string | null
+          scopes?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          platform_user_id?: string | null
+          platform_username?: string | null
+          platform_display_name?: string | null
+          platform_avatar_url?: string | null
+          scopes?: string[] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          id: string
+          user_id: string
+          stripe_subscription_id: string | null
+          stripe_price_id: string | null
+          plan: 'free' | 'pro' | 'artist' | 'label'
+          status: 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete'
+          current_period_start: string | null
+          current_period_end: string | null
+          cancel_at_period_end: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          stripe_subscription_id?: string | null
+          stripe_price_id?: string | null
+          plan?: 'free' | 'pro' | 'artist' | 'label'
+          status?: 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete'
+          current_period_start?: string | null
+          current_period_end?: string | null
+          cancel_at_period_end?: boolean
+        }
+        Update: {
+          stripe_subscription_id?: string | null
+          stripe_price_id?: string | null
+          plan?: 'free' | 'pro' | 'artist' | 'label'
+          status?: 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete'
+          current_period_start?: string | null
+          current_period_end?: string | null
+          cancel_at_period_end?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_playlists: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          description: string | null
+          cover_url: string | null
+          is_public: boolean
+          source_platform: 'local' | 'spotify' | 'soundcloud' | 'youtube' | null
+          source_id: string | null
+          track_count: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          description?: string | null
+          cover_url?: string | null
+          is_public?: boolean
+          source_platform?: 'local' | 'spotify' | 'soundcloud' | 'youtube' | null
+          source_id?: string | null
+          track_count?: number
+        }
+        Update: {
+          name?: string
+          description?: string | null
+          cover_url?: string | null
+          is_public?: boolean
+          track_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_playlist_tracks: {
+        Row: {
+          id: string
+          playlist_id: string
+          position: number
+          title: string
+          artist: string | null
+          album: string | null
+          cover_url: string | null
+          duration_ms: number | null
+          spotify_id: string | null
+          spotify_url: string | null
+          youtube_id: string | null
+          youtube_url: string | null
+          soundcloud_url: string | null
+          apple_url: string | null
+          release_id: string | null
+          added_at: string
+        }
+        Insert: {
+          id?: string
+          playlist_id: string
+          position?: number
+          title: string
+          artist?: string | null
+          album?: string | null
+          cover_url?: string | null
+          duration_ms?: number | null
+          spotify_id?: string | null
+          spotify_url?: string | null
+          youtube_id?: string | null
+          youtube_url?: string | null
+          soundcloud_url?: string | null
+          apple_url?: string | null
+          release_id?: string | null
+        }
+        Update: {
+          position?: number
+          title?: string
+          artist?: string | null
+          cover_url?: string | null
         }
         Relationships: []
       }

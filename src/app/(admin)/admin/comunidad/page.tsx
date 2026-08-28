@@ -11,9 +11,12 @@ const ROLE_CONFIG = {
   artist: { label: 'Artista', color: 'text-purple-400 bg-purple-500/15', icon: Crown },
   admin: { label: 'Admin', color: 'text-red-400 bg-red-500/15', icon: Shield },
 }
-const MEMBERSHIP_CONFIG = {
+const MEMBERSHIP_CONFIG: Record<string, { label: string; color: string }> = {
   free: { label: 'Free', color: 'text-[var(--muted-foreground)] bg-[var(--muted)]' },
   premium: { label: 'Premium', color: 'text-yellow-400 bg-yellow-500/15' },
+  pro: { label: 'Pro', color: 'text-purple-400 bg-purple-500/15' },
+  artist: { label: 'Artist', color: 'text-purple-300 bg-purple-600/15' },
+  label: { label: 'Label', color: 'text-yellow-300 bg-yellow-600/15' },
 }
 
 export default async function ComunidadAdminPage() {
