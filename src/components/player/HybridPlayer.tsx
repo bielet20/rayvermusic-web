@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, type MutableRefObject } from 'react'
 import {
   usePlayerStore,
   getBestPlatform,
@@ -13,154 +13,238 @@ import {
   type PlayerPlatform,
 } from '@/lib/player-store'
 import {
+  loadYouTubeIframeAPI,
+  loadSoundCloudWidgetAPI,
+  unlockMediaPlayback,
+  runPlayFromUserGesture,
+  setMediaBridge,
+  prepareHtmlAudio,
+  iosSafeHiddenMediaStyle,
+  isIOSDevice,
+  isStandalonePWA,
+} from '@/lib/media-loaders'
+import CoverArt, { mediaSessionArtwork } from '@/components/player/CoverArt'
+import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
-  ChevronDown, Volume2, VolumeX, ListMusic, Music2, Loader2, ExternalLink,
+  ChevronDown, Volume2, VolumeX, ListMusic, Loader2, ExternalLink,
 } from 'lucide-react'
 
-declare global {
-  interface Window {
-    YT: {
-      Player: new (el: HTMLElement | string, opts: Record<string, unknown>) => YTPlayer
-      PlayerState: { PLAYING: number; PAUSED: number; ENDED: number; BUFFERING: number }
-    }
-    onYouTubeIframeAPIReady: (() => void) | undefined
-    SC: { Widget: (iframe: HTMLIFrameElement) => SCWidget }
-  }
-}
+/**
+ * Persistent engines stay mounted for the life of the player chrome.
+ * Remounting/destroying YT.Player or iframes between tracks is the main
+ * reason iPhone PWA plays once and then YouTube/Spotify go silent: the next
+ * play() runs from useEffect outside the tap gesture.
+ */
 
-interface YTPlayer {
-  loadVideoById: (id: string) => void
-  playVideo: () => void
-  pauseVideo: () => void
-  setVolume: (v: number) => void
-  destroy: () => void
-}
-
-interface SCWidget {
-  play: () => void
-  pause: () => void
-  load: (url: string, opts: Record<string, unknown>) => void
-  bind: (event: string, handler: () => void) => void
-}
-
-// ─── YouTube Engine ───────────────────────────────────────────
+// ─── YouTube Engine (singleton instance, never destroy on track change) ──
 function YouTubeEngine({
   track,
+  active,
   isPlaying,
   volume,
   onEnd,
   onReadyChange,
+  playerRefOut,
 }: {
   track: PlayerTrack | null
+  active: boolean
   isPlaying: boolean
   volume: number
   onEnd: () => void
   onReadyChange: (ready: boolean) => void
+  playerRefOut: MutableRefObject<YTPlayer | null>
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<YTPlayer | null>(null)
   const readyRef = useRef(false)
   const isPlayingRef = useRef(isPlaying)
+  const activeRef = useRef(active)
+  const volumeRef = useRef(volume)
+  const onEndRef = useRef(onEnd)
+  const onReadyChangeRef = useRef(onReadyChange)
+  const wantedIdRef = useRef<string | null>(null)
+  const bootedRef = useRef(false)
 
   useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
+  useEffect(() => { activeRef.current = active }, [active])
+  useEffect(() => { volumeRef.current = volume }, [volume])
+  useEffect(() => { onEndRef.current = onEnd }, [onEnd])
+  useEffect(() => { onReadyChangeRef.current = onReadyChange }, [onReadyChange])
 
   const videoId = track?.youtube_url ? extractYouTubeId(track.youtube_url) : null
 
-  const initPlayer = useCallback(() => {
-    if (!containerRef.current || !videoId) return
-    if (playerRef.current) { try { playerRef.current.destroy() } catch { /* noop */ } }
-    readyRef.current = false
-    onReadyChange(false)
-    playerRef.current = new window.YT.Player(containerRef.current, {
-      videoId,
-      playerVars: { autoplay: 0, controls: 0, rel: 0, modestbranding: 1 },
-      events: {
-        onReady: () => {
-          readyRef.current = true
-          onReadyChange(true)
-          if (isPlayingRef.current) playerRef.current?.playVideo()
-        },
-        onStateChange: (e: { data: number }) => {
-          if (e.data === window.YT.PlayerState.ENDED) onEnd()
-        },
-      },
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoId])
+  const applyPlayState = useCallback(() => {
+    const player = playerRef.current
+    if (!player || !readyRef.current) return
+    try {
+      if (activeRef.current && isPlayingRef.current) player.playVideo()
+      else player.pauseVideo()
+    } catch { /* mid-destroy */ }
+  }, [])
 
+  // Boot the player once
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (window.YT) { initPlayer(); return }
-    const prev = window.onYouTubeIframeAPIReady
-    window.onYouTubeIframeAPIReady = () => { prev?.(); initPlayer() }
-    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-      const tag = document.createElement('script')
-      tag.src = 'https://www.youtube.com/iframe_api'
-      document.head.appendChild(tag)
+    if (bootedRef.current) return
+    bootedRef.current = true
+    let cancelled = false
+
+    ;(async () => {
+      let YT: YTNamespace
+      try {
+        YT = await loadYouTubeIframeAPI()
+      } catch {
+        return
+      }
+      if (cancelled || !containerRef.current) return
+
+      const host = containerRef.current
+      host.innerHTML = ''
+      const mount = document.createElement('div')
+      host.appendChild(mount)
+
+      const initialId = wantedIdRef.current || videoId || undefined
+      playerRef.current = new YT.Player(mount, {
+        videoId: initialId,
+        width: 1,
+        height: 1,
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          fs: 0,
+          origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+        },
+        events: {
+          onReady: (e: { target: YTPlayer }) => {
+            if (cancelled) return
+            readyRef.current = true
+            playerRefOut.current = e.target
+            onReadyChangeRef.current(true)
+            try { e.target.setVolume(volumeRef.current) } catch { /* noop */ }
+            applyPlayState()
+          },
+          onStateChange: (e: { data: number }) => {
+            if (e.data === YT.PlayerState.ENDED && activeRef.current) onEndRef.current()
+          },
+          onError: () => {
+            if (activeRef.current && isPlayingRef.current) onEndRef.current()
+          },
+        },
+      })
+      playerRefOut.current = playerRef.current
+    })()
+
+    return () => {
+      cancelled = true
+      try { playerRef.current?.destroy() } catch { /* noop */ }
+      playerRef.current = null
+      playerRefOut.current = null
+      readyRef.current = false
     }
-    return () => { try { playerRef.current?.destroy() } catch { /* noop */ } }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Track change: NEVER recreate — loadVideoById / cueVideoById only
   useEffect(() => {
-    if (!window.YT || !videoId) return
-    if (playerRef.current && readyRef.current) {
-      playerRef.current.loadVideoById(videoId)
-      if (isPlayingRef.current) playerRef.current.playVideo()
-    } else {
-      initPlayer()
+    if (!videoId) {
+      if (readyRef.current && playerRef.current && !active) {
+        try { playerRef.current.pauseVideo() } catch { /* noop */ }
+      }
+      return
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoId])
+    wantedIdRef.current = videoId
+    if (!playerRef.current || !readyRef.current) return
+    if (!active) {
+      try { playerRef.current.pauseVideo() } catch { /* noop */ }
+      return
+    }
+    try {
+      if (isPlayingRef.current) playerRef.current.loadVideoById(videoId)
+      else playerRef.current.cueVideoById(videoId)
+    } catch { /* noop */ }
+  }, [videoId, active])
+
+  useEffect(() => { applyPlayState() }, [isPlaying, active, applyPlayState])
 
   useEffect(() => {
-    if (!readyRef.current || !playerRef.current) return
-    if (isPlaying) playerRef.current.playVideo()
-    else playerRef.current.pauseVideo()
-  }, [isPlaying])
-
-  useEffect(() => {
-    if (readyRef.current) playerRef.current?.setVolume(volume)
+    if (readyRef.current) {
+      try { playerRef.current?.setVolume(volume) } catch { /* noop */ }
+    }
   }, [volume])
 
-  return (
-    <div
-      ref={containerRef}
-      style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', pointerEvents: 'none' }}
-      aria-hidden
-    />
-  )
+  return <div ref={containerRef} style={iosSafeHiddenMediaStyle()} aria-hidden />
 }
 
-// ─── Direct Audio Engine ──────────────────────────────────────
-function AudioEngine({ track, isPlaying, volume, onEnd }: {
+// ─── Direct Audio Engine (one element, swap src — don't recreate) ──
+function AudioEngine({
+  track,
+  active,
+  isPlaying,
+  volume,
+  onEnd,
+  audioRefOut,
+}: {
   track: PlayerTrack | null
+  active: boolean
   isPlaying: boolean
   volume: number
   onEnd: () => void
+  audioRefOut: MutableRefObject<HTMLAudioElement | null>
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const isPlayingRef = useRef(isPlaying)
+  const activeRef = useRef(active)
+  const onEndRef = useRef(onEnd)
 
   useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
+  useEffect(() => { activeRef.current = active }, [active])
+  useEffect(() => { onEndRef.current = onEnd }, [onEnd])
 
   useEffect(() => {
-    if (!track?.audio_url) return
-    if (!audioRef.current) audioRef.current = new Audio()
+    const audio = prepareHtmlAudio(new Audio())
+    audioRef.current = audio
+    audioRefOut.current = audio
+    const handleEnded = () => {
+      if (activeRef.current) onEndRef.current()
+    }
+    audio.addEventListener('ended', handleEnded)
+    return () => {
+      audio.removeEventListener('ended', handleEnded)
+      audio.pause()
+      audioRef.current = null
+      audioRefOut.current = null
+    }
+  }, [audioRefOut])
+
+  useEffect(() => {
     const audio = audioRef.current
-    audio.src = track.audio_url
+    if (!audio || !track?.audio_url) return
+    const next = track.audio_url
+    if (audio.src !== next && !audio.src.endsWith(next) && audio.getAttribute('data-url') !== next) {
+      audio.setAttribute('data-url', next)
+      audio.src = next
+      // Don't call load()+play here on iOS — that must happen in the tap bridge
+      if (!(isIOSDevice() && isStandalonePWA())) {
+        audio.load()
+      }
+    }
     audio.volume = volume / 100
-    audio.onended = onEnd
-    if (isPlayingRef.current) audio.play().catch(() => {})
-    return () => { audio.pause() }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track?.audio_url])
+  }, [track?.audio_url, volume])
 
   useEffect(() => {
-    if (!audioRef.current) return
-    if (isPlaying) audioRef.current.play().catch(() => {})
-    else audioRef.current.pause()
-  }, [isPlaying])
+    const audio = audioRef.current
+    if (!audio) return
+    if (active && isPlaying) {
+      // Desktop / non-strict: effect play is a fallback. iOS relies on the bridge.
+      if (!(isIOSDevice() && isStandalonePWA())) {
+        void audio.play().catch(() => {})
+      }
+    } else {
+      audio.pause()
+    }
+  }, [isPlaying, active])
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume / 100
@@ -169,42 +253,139 @@ function AudioEngine({ track, isPlaying, volume, onEnd }: {
   return null
 }
 
-// ─── SoundCloud Engine ────────────────────────────────────────
-function SoundCloudEngine({ track, isPlaying }: { track: PlayerTrack | null; isPlaying: boolean }) {
+// ─── SoundCloud Engine (one iframe + Widget.load, never remount src blindly) ──
+function SoundCloudEngine({
+  track,
+  active,
+  isPlaying,
+  volume,
+  onEnd,
+  widgetRefOut,
+}: {
+  track: PlayerTrack | null
+  active: boolean
+  isPlaying: boolean
+  volume: number
+  onEnd: () => void
+  widgetRefOut: MutableRefObject<SCWidget | null>
+}) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const widgetRef = useRef<SCWidget | null>(null)
+  const readyRef = useRef(false)
   const isPlayingRef = useRef(isPlaying)
-  const url = track?.soundcloud_url ? getSoundCloudWidgetUrl(track.soundcloud_url) : null
+  const activeRef = useRef(active)
+  const volumeRef = useRef(volume)
+  const onEndRef = useRef(onEnd)
+  const boundUrlRef = useRef<string | null>(null)
+  const bootedRef = useRef(false)
+
+  const pageUrl = track?.soundcloud_url ?? null
 
   useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
+  useEffect(() => { activeRef.current = active }, [active])
+  useEffect(() => { volumeRef.current = volume }, [volume])
+  useEffect(() => { onEndRef.current = onEnd }, [onEnd])
 
+  const applyPlayState = useCallback(() => {
+    const widget = widgetRef.current
+    if (!widget || !readyRef.current) return
+    try {
+      if (activeRef.current && isPlayingRef.current) widget.play()
+      else widget.pause()
+    } catch { /* noop */ }
+  }, [])
+
+  // Boot once with a blank-ish first track URL or placeholder
   useEffect(() => {
-    if (!url || !iframeRef.current) return
-    const setup = () => {
-      if (!iframeRef.current || !window.SC) return
-      widgetRef.current = window.SC.Widget(iframeRef.current)
-      widgetRef.current.bind('ready', () => {
-        if (isPlayingRef.current) widgetRef.current?.play()
+    if (bootedRef.current || !iframeRef.current) return
+    bootedRef.current = true
+    const iframe = iframeRef.current
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        await loadSoundCloudWidgetAPI()
+      } catch {
+        return
+      }
+      if (cancelled || !iframeRef.current) return
+
+      await new Promise<void>((resolve) => {
+        const onLoad = () => {
+          iframe.removeEventListener('load', onLoad)
+          resolve()
+        }
+        iframe.addEventListener('load', onLoad)
+        window.setTimeout(() => {
+          iframe.removeEventListener('load', onLoad)
+          resolve()
+        }, 2000)
       })
+      if (cancelled || !window.SC?.Widget) return
+
+      const widget = window.SC.Widget(iframe)
+      widgetRef.current = widget
+      widgetRefOut.current = widget
+
+      widget.bind(window.SC.Widget.Events.READY, () => {
+        readyRef.current = true
+        try { widget.setVolume?.(volumeRef.current) } catch { /* noop */ }
+        applyPlayState()
+      })
+      widget.bind(window.SC.Widget.Events.FINISH, () => {
+        if (activeRef.current) onEndRef.current()
+      })
+    })()
+
+    return () => {
+      cancelled = true
+      widgetRef.current = null
+      widgetRefOut.current = null
     }
-    if (window.SC) { setup(); return }
-    const s = document.createElement('script')
-    s.src = 'https://w.soundcloud.com/player/api.js'
-    s.onload = setup
-    document.head.appendChild(s)
-  }, [url])
+  }, [applyPlayState, widgetRefOut])
+
+  // Track change via Widget.load — do not remount the iframe
+  useEffect(() => {
+    if (!pageUrl || !widgetRef.current) return
+    if (boundUrlRef.current === pageUrl) {
+      applyPlayState()
+      return
+    }
+    boundUrlRef.current = pageUrl
+    readyRef.current = false
+    try {
+      widgetRef.current.load(pageUrl, {
+        auto_play: false,
+        callback: () => {
+          readyRef.current = true
+          applyPlayState()
+        },
+      })
+    } catch { /* noop */ }
+  }, [pageUrl, applyPlayState])
+
+  useEffect(() => { applyPlayState() }, [isPlaying, active, applyPlayState])
 
   useEffect(() => {
-    if (!widgetRef.current) return
-    if (isPlaying) widgetRef.current.play()
-    else widgetRef.current.pause()
-  }, [isPlaying])
+    if (readyRef.current) {
+      try { widgetRef.current?.setVolume?.(volume) } catch { /* noop */ }
+    }
+  }, [volume])
 
-  if (!url) return null
+  // Seed iframe with first available SC url or a harmless blank player shell
+  const seed = pageUrl
+    ? getSoundCloudWidgetUrl(pageUrl, false)
+    : 'https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fsoundcloud%2Fsets%2Fsoundcloud-charts-top&auto_play=false&hide_related=true&show_comments=false&show_user=false&show_reposts=false&show_teaser=false'
+
   return (
-    <iframe ref={iframeRef} src={url}
-      style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px' }}
-      aria-hidden allow="autoplay" />
+    <iframe
+      ref={iframeRef}
+      src={seed}
+      title="SoundCloud player"
+      style={iosSafeHiddenMediaStyle()}
+      aria-hidden
+      allow="autoplay; encrypted-media"
+    />
   )
 }
 
@@ -230,13 +411,7 @@ function TrackRow({ track, index, isActive, isPlaying, onPlay }: {
         ) : (index + 1)}
       </span>
 
-      <div className="w-10 h-10 rounded-lg overflow-hidden bg-[var(--muted)] flex-shrink-0">
-        {track.cover_url
-          // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={track.cover_url} alt="" className="w-full h-full object-cover" />
-          : <div className="w-full h-full flex items-center justify-center"><Music2 size={14} className="text-[var(--border)]" /></div>
-        }
-      </div>
+      <CoverArt track={track} className="w-10 h-10 rounded-lg flex-shrink-0" iconSize={14} />
 
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-semibold truncate ${isActive ? 'text-white' : ''}`}>{track.title}</p>
@@ -257,31 +432,50 @@ function TrackRow({ track, index, isActive, isPlaying, onPlay }: {
   )
 }
 
-// ─── Embed viewer for Spotify / SC (no YT) ───────────────────
-function EmbedViewer({ track }: { track: PlayerTrack }) {
+function EmbedViewer({ track, autoPlay }: { track: PlayerTrack; autoPlay?: boolean }) {
   if (track.spotify_url) {
+    // Stable key by track id so React does not thrash the iframe on unrelated renders;
+    // still remounts per track (Spotify has no load API). On iOS PWA autoplay inside
+    // the embed usually fails after the first track — user must tap Spotify's own play.
+    const src = getSpotifyEmbedUrl(track.spotify_url) + (autoPlay ? '&autoplay=1' : '')
     return (
       <iframe
-        src={getSpotifyEmbedUrl(track.spotify_url)}
+        key={track.id}
+        src={src}
         allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-        loading="lazy" className="w-full rounded-xl border-0" style={{ height: 152 }}
+        loading="eager"
+        className="w-full rounded-xl border-0"
+        style={{ height: 152 }}
+        title="Spotify embed"
       />
     )
   }
   if (track.soundcloud_url) {
     return (
-      <iframe src={getSoundCloudWidgetUrl(track.soundcloud_url)}
-        allow="autoplay" className="w-full rounded-xl border-0" style={{ height: 120 }} />
+      <iframe
+        src={getSoundCloudWidgetUrl(track.soundcloud_url, !!autoPlay)}
+        allow="autoplay"
+        className="w-full rounded-xl border-0"
+        style={{ height: 120 }}
+        title="SoundCloud embed"
+      />
     )
   }
   return null
+}
+
+function spotifyDeepLink(url: string): string {
+  // open.spotify.com/track/ID → spotify:track:ID (opens app from PWA when possible)
+  const m = url.match(/open\.spotify\.com\/(track|album|playlist|artist)\/([A-Za-z0-9]+)/)
+  if (m) return `spotify:${m[1]}:${m[2]}`
+  return url
 }
 
 // ─── Main Component ───────────────────────────────────────────
 export default function HybridPlayer() {
   const {
     playlist, meta, currentIndex, isPlaying, isExpanded, shuffle, repeat, volume,
-    toggle, next, prev, playTrack, toggleShuffle, cycleRepeat, setExpanded, setVolume, pause,
+    toggle, next, prev, playTrack, toggleShuffle, cycleRepeat, setExpanded, setVolume,
     isYtReady, setYtReady,
   } = usePlayerStore()
 
@@ -291,33 +485,178 @@ export default function HybridPlayer() {
   const useYT = best?.platform === 'youtube'
   const useSC = best?.platform === 'soundcloud'
   const isEmbedOnly = best !== null && (best.platform === 'spotify' || best.platform === 'apple')
-  // Only show embed viewer for platforms we can't control (Spotify/Apple), not SC which has its own engine
   const showEmbed = isEmbedOnly && current && (current.spotify_url || current.soundcloud_url)
 
-  // Auto-skip tracks that can't be played natively (Spotify/Apple), only if player was active
-  const wasPlayingRef = useRef(false)
-  useEffect(() => { wasPlayingRef.current = isPlaying }, [isPlaying])
+  const ytPlayerRef = useRef<YTPlayer | null>(null)
+  const audioElRef = useRef<HTMLAudioElement | null>(null)
+  const scWidgetRef = useRef<SCWidget | null>(null)
+  const currentRef = useRef(current)
+  const bestRef = useRef(best)
+  useEffect(() => { currentRef.current = current }, [current])
+  useEffect(() => { bestRef.current = best }, [best])
+
+  // Media Session metadata (lock screen / Control Center). Does not start playback.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator) || !current) return
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: current.title,
+        artist: current.artist,
+        artwork: mediaSessionArtwork(current),
+      })
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused'
+    } catch { /* older WebKit */ }
+  }, [current, isPlaying])
 
   useEffect(() => {
-    if (!isEmbedOnly) return
-    if (wasPlayingRef.current) next()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex])
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
+    try {
+      navigator.mediaSession.setActionHandler('play', () => {
+        unlockMediaPlayback()
+        usePlayerStore.getState().play()
+        // Media Session handlers count as a gesture on some iOS versions
+        runPlayFromUserGesture(true)
+      })
+      navigator.mediaSession.setActionHandler('pause', () => {
+        usePlayerStore.getState().pause()
+        runPlayFromUserGesture(false)
+      })
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        unlockMediaPlayback()
+        usePlayerStore.getState().next()
+        // next() updates index async relative to bridge — nudge after microtask
+        queueMicrotask(() => runPlayFromUserGesture(true))
+      })
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        unlockMediaPlayback()
+        usePlayerStore.getState().prev()
+        queueMicrotask(() => runPlayFromUserGesture(true))
+      })
+    } catch { /* noop */ }
+    return () => {
+      try {
+        navigator.mediaSession.setActionHandler('play', null)
+        navigator.mediaSession.setActionHandler('pause', null)
+        navigator.mediaSession.setActionHandler('nexttrack', null)
+        navigator.mediaSession.setActionHandler('previoustrack', null)
+      } catch { /* noop */ }
+    }
+  }, [])
+
+  // Register a sync bridge so taps can start media inside the gesture stack
+  useEffect(() => {
+    setMediaBridge({
+      playSync: () => {
+        const b = bestRef.current
+        const t = currentRef.current
+        if (!b || !t) return
+        if (b.platform === 'youtube') {
+          const id = extractYouTubeId(t.youtube_url || '')
+          const p = ytPlayerRef.current
+          if (!p || !id) return
+          try {
+            p.loadVideoById(id)
+            p.playVideo()
+          } catch { /* noop */ }
+        } else if (b.platform === 'direct') {
+          const a = audioElRef.current
+          if (!a || !t.audio_url) return
+          try {
+            if (a.getAttribute('data-url') !== t.audio_url) {
+              a.setAttribute('data-url', t.audio_url)
+              a.src = t.audio_url
+            }
+            void a.play()
+          } catch { /* noop */ }
+        } else if (b.platform === 'soundcloud') {
+          const w = scWidgetRef.current
+          if (!w || !t.soundcloud_url) return
+          try {
+            w.load(t.soundcloud_url, { auto_play: true })
+            w.play()
+          } catch {
+            try { w.play() } catch { /* noop */ }
+          }
+        }
+        // Spotify/Apple: no reliable programmatic play in iOS PWA — UI opens embed / deep link
+      },
+      pauseSync: () => {
+        try { ytPlayerRef.current?.pauseVideo() } catch { /* noop */ }
+        try { audioElRef.current?.pause() } catch { /* noop */ }
+        try { scWidgetRef.current?.pause() } catch { /* noop */ }
+      },
+    })
+    return () => setMediaBridge(null)
+  }, [])
+
+  // Preload APIs once
+  useEffect(() => {
+    void loadYouTubeIframeAPI().catch(() => {})
+    void loadSoundCloudWidgetAPI().catch(() => {})
+  }, [])
 
   if (!playlist.length || !current) return null
 
+  const onToggle = () => {
+    const willPlay = !usePlayerStore.getState().isPlaying
+    runPlayFromUserGesture(willPlay)
+    toggle()
+  }
+  const onPrev = () => {
+    runPlayFromUserGesture(true)
+    prev()
+    // After prev updates the store, nudge play again for the new track inside
+    // a microtask — still usually within iOS transient activation on WebKit.
+    queueMicrotask(() => runPlayFromUserGesture(true))
+  }
+  const onNext = () => {
+    runPlayFromUserGesture(true)
+    next()
+    queueMicrotask(() => runPlayFromUserGesture(true))
+  }
+  const onPlayTrack = (i: number) => {
+    runPlayFromUserGesture(true)
+    playTrack(i)
+    setExpanded(false)
+    queueMicrotask(() => runPlayFromUserGesture(true))
+  }
+  const onOpenSpotify = () => {
+    if (!current.spotify_url) return
+    unlockMediaPlayback()
+    // Prefer app deep link from standalone PWA; fall back to https
+    const deep = spotifyDeepLink(current.spotify_url)
+    window.location.href = deep
+  }
+
   return (
     <>
-      {useDirect && <AudioEngine track={current} isPlaying={isPlaying} volume={volume} onEnd={next} />}
-      {useYT && (
-        <YouTubeEngine
-          track={current} isPlaying={isPlaying} volume={volume}
-          onEnd={next} onReadyChange={setYtReady}
-        />
-      )}
-      {useSC && <SoundCloudEngine track={current} isPlaying={isPlaying} />}
+      {/* Engines stay mounted — only `active` flips. Avoids iOS destroy/recreate trap. */}
+      <AudioEngine
+        track={current}
+        active={!!useDirect}
+        isPlaying={isPlaying}
+        volume={volume}
+        onEnd={next}
+        audioRefOut={audioElRef}
+      />
+      <YouTubeEngine
+        track={current}
+        active={!!useYT}
+        isPlaying={isPlaying}
+        volume={volume}
+        onEnd={next}
+        onReadyChange={setYtReady}
+        playerRefOut={ytPlayerRef}
+      />
+      <SoundCloudEngine
+        track={current}
+        active={!!useSC}
+        isPlaying={isPlaying}
+        volume={volume}
+        onEnd={next}
+        widgetRefOut={scWidgetRef}
+      />
 
-      {/* Expanded panel */}
       {isExpanded && (
         <div className="fixed inset-x-0 top-[72px] z-40 flex flex-col border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-xl shadow-2xl" style={{ maxHeight: '60vh' }}>
           <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border)] flex-shrink-0">
@@ -332,24 +671,38 @@ export default function HybridPlayer() {
 
           {showEmbed && best && (
             <div className="px-4 pt-3 pb-3 flex-shrink-0 border-b border-[var(--border)]">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-3 gap-2">
                 <p className="text-xs text-[var(--muted-foreground)]">
                   Solo disponible en{' '}
                   <span className="font-semibold text-[var(--foreground)]">
                     {PLATFORM_LABELS[best.platform as PlayerPlatform]}
                   </span>
+                  {isIOSDevice() && best.platform === 'spotify' ? (
+                    <span className="block mt-1">En iPhone (PWA) pulsa el play del embed o abre la app.</span>
+                  ) : null}
                 </p>
-                <a
-                  href={best.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-600 text-white hover:bg-purple-500 transition-colors"
-                >
-                  <ExternalLink size={11} />
-                  Abrir en {PLATFORM_LABELS[best.platform as PlayerPlatform]}
-                </a>
+                {best.platform === 'spotify' ? (
+                  <button
+                    type="button"
+                    onClick={onOpenSpotify}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-600 text-white hover:bg-purple-500 transition-colors flex-shrink-0"
+                  >
+                    <ExternalLink size={11} />
+                    Abrir en Spotify
+                  </button>
+                ) : (
+                  <a
+                    href={best.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-600 text-white hover:bg-purple-500 transition-colors flex-shrink-0"
+                  >
+                    <ExternalLink size={11} />
+                    Abrir en {PLATFORM_LABELS[best.platform as PlayerPlatform]}
+                  </a>
+                )}
               </div>
-              <EmbedViewer track={current} />
+              <EmbedViewer track={current} autoPlay={isPlaying && !isIOSDevice()} />
             </div>
           )}
 
@@ -357,29 +710,21 @@ export default function HybridPlayer() {
             {playlist.map((t, i) => (
               <TrackRow key={`${t.id}-${i}`} track={t} index={i}
                 isActive={i === currentIndex} isPlaying={isPlaying}
-                onPlay={() => { playTrack(i); setExpanded(false) }}
+                onPlay={() => onPlayTrack(i)}
               />
             ))}
           </div>
         </div>
       )}
 
-      {/* Top bar */}
       <div className="fixed top-0 inset-x-0 z-[60] h-[72px] border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto h-full px-4 flex items-center gap-3">
 
-          {/* Track info */}
           <button
             onClick={() => setExpanded(!isExpanded)}
             className="flex items-center gap-3 min-w-0 flex-1 sm:flex-none sm:w-64 group text-left"
           >
-            <div className="w-10 h-10 rounded-lg overflow-hidden bg-[var(--muted)] flex-shrink-0 ring-1 ring-[var(--border)] group-hover:ring-purple-500/40 transition-all">
-              {current.cover_url
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={current.cover_url} alt="" className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center"><Music2 size={16} className="text-[var(--border)]" /></div>
-              }
-            </div>
+            <CoverArt track={current} className="w-10 h-10 rounded-lg flex-shrink-0 ring-1 ring-[var(--border)] group-hover:ring-purple-500/40 transition-all" iconSize={16} />
             <div className="min-w-0">
               <p className="text-sm font-semibold truncate group-hover:text-purple-400 transition-colors leading-tight">{current.title}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
@@ -393,29 +738,39 @@ export default function HybridPlayer() {
             </div>
           </button>
 
-          {/* Controls */}
           <div className="flex items-center gap-1 flex-1 justify-center">
             <button onClick={toggleShuffle}
               className={`p-2 rounded-lg transition-colors hidden sm:flex ${shuffle ? 'text-purple-400' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}>
               <Shuffle size={15} />
             </button>
-            <button onClick={prev} className="p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+            <button onClick={onPrev} className="p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
               <SkipBack size={18} />
             </button>
             {isEmbedOnly && best ? (
-              <a
-                href={best.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setExpanded(true)}
-                title={`Abrir en ${PLATFORM_LABELS[best.platform as PlayerPlatform]}`}
-                className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-transform shadow-lg flex-shrink-0"
-              >
-                <ExternalLink size={16} />
-              </a>
+              best.platform === 'spotify' ? (
+                <button
+                  type="button"
+                  onClick={() => { setExpanded(true); onOpenSpotify() }}
+                  title="Abrir en Spotify"
+                  className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-transform shadow-lg flex-shrink-0"
+                >
+                  <ExternalLink size={16} />
+                </button>
+              ) : (
+                <a
+                  href={best.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setExpanded(true)}
+                  title={`Abrir en ${PLATFORM_LABELS[best.platform as PlayerPlatform]}`}
+                  className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-transform shadow-lg flex-shrink-0"
+                >
+                  <ExternalLink size={16} />
+                </a>
+              )
             ) : (
               <button
-                onClick={toggle}
+                onClick={onToggle}
                 className={`w-10 h-10 rounded-full bg-white text-black flex items-center justify-center transition-transform shadow-lg flex-shrink-0 ${useYT && !isYtReady ? 'opacity-70 cursor-wait' : 'hover:scale-105'}`}
               >
                 {useYT && !isYtReady
@@ -424,7 +779,7 @@ export default function HybridPlayer() {
                 }
               </button>
             )}
-            <button onClick={next} className="p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+            <button onClick={onNext} className="p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
               <SkipForward size={18} />
             </button>
             <button onClick={cycleRepeat}
@@ -433,7 +788,6 @@ export default function HybridPlayer() {
             </button>
           </div>
 
-          {/* Volume + expand */}
           <div className="flex items-center gap-2">
             <div className="hidden sm:flex items-center gap-1.5">
               <button onClick={() => setVolume(volume === 0 ? 80 : 0)}

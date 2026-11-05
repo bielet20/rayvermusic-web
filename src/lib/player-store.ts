@@ -70,8 +70,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   volume: 80,
 
   loadPlaylist: (tracks, meta = null, startIndex = 0) => {
-    const idx = tracks.findIndex((t, i) => i >= startIndex && isPlayable(t))
-    set({ playlist: tracks, meta, currentIndex: idx >= 0 ? idx : startIndex, isLoaded: true, isPlaying: false, isYtReady: false })
+    const normalized = tracks.map((t) => ({
+      ...t,
+      cover_url: resolveCoverForTrack(t) ?? t.cover_url,
+    }))
+    const idx = normalized.findIndex((t, i) => i >= startIndex && isPlayable(t))
+    set({ playlist: normalized, meta, currentIndex: idx >= 0 ? idx : startIndex, isLoaded: true, isPlaying: false, isYtReady: false })
   },
 
   playTrack: (index) => set({ currentIndex: index, isPlaying: true }),
@@ -145,14 +149,29 @@ export function extractYouTubeId(url: string): string | null {
   return m?.[1] ?? null
 }
 
+
+/** Prefer stored cover; else YouTube hqdefault so artwork stays tied to the track. */
+export function resolveCoverForTrack(track: PlayerTrack): string | null {
+  const raw = track.cover_url?.trim()
+  if (raw) return raw
+  if (track.youtube_url) {
+    const id = extractYouTubeId(track.youtube_url)
+    if (id) return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
+  }
+  return null
+}
+
+
 export function getSpotifyEmbedUrl(url: string): string {
   return url
     .replace('open.spotify.com/', 'open.spotify.com/embed/')
     .replace(/\?.*$/, '') + '?utm_source=generator&theme=0'
 }
 
-export function getSoundCloudWidgetUrl(url: string): string {
-  return `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&color=%23a855f7&auto_play=true&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false`
+export function getSoundCloudWidgetUrl(url: string, autoPlay = false): string {
+  // auto_play must stay false by default: hidden iframes are blocked by the
+  // browser autoplay policy, and the Widget API drives play after READY.
+  return `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&color=%23a855f7&auto_play=${autoPlay ? 'true' : 'false'}&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false`
 }
 
 export const PLATFORM_LABELS: Record<PlayerPlatform, string> = {

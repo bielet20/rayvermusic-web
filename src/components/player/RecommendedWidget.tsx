@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect } from 'react'
 import { usePlayerStore, getBestPlatform, PLATFORM_LABELS, PLATFORM_COLORS, type PlayerTrack, type PlayerPlatform } from '@/lib/player-store'
-import { Play, Pause, Music2, SkipForward, ListMusic, Loader2 } from 'lucide-react'
+import { Play, Pause, SkipForward, ListMusic, Loader2 } from 'lucide-react'
+import { runPlayFromUserGesture } from '@/lib/media-loaders'
+import CoverArt from '@/components/player/CoverArt'
 
 function MiniTrack({ track, index, isActive, isPlaying, onPlay }: {
   track: PlayerTrack; index: number; isActive: boolean; isPlaying: boolean; onPlay: () => void
@@ -24,13 +25,7 @@ function MiniTrack({ track, index, isActive, isPlaying, onPlay }: {
           </span>
         ) : index + 1}
       </span>
-      <div className="w-9 h-9 rounded-lg overflow-hidden bg-[var(--muted)] flex-shrink-0">
-        {track.cover_url
-          // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={track.cover_url} alt="" className="w-full h-full object-cover" />
-          : <div className="w-full h-full flex items-center justify-center"><Music2 size={12} className="text-[var(--border)]" /></div>
-        }
-      </div>
+      <CoverArt track={track} className="w-9 h-9 rounded-lg flex-shrink-0" iconSize={12} />
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-semibold truncate leading-tight ${isActive ? 'text-white' : ''}`}>{track.title}</p>
         <p className="text-xs text-[var(--muted-foreground)] truncate">{track.artist}</p>
@@ -54,10 +49,25 @@ export default function RecommendedWidget() {
   const isYtTrack = getBestPlatform(current)?.platform === 'youtube'
   const isPlayerReady = !isYtTrack || isYtReady
 
+  const onToggle = () => {
+    const will = !isPlaying
+    runPlayFromUserGesture(will)
+    toggle()
+  }
+  const onNext = () => {
+    runPlayFromUserGesture(true)
+    next()
+    queueMicrotask(() => runPlayFromUserGesture(true))
+  }
+  const onPlayTrack = (i: number) => {
+    runPlayFromUserGesture(true)
+    playTrack(i)
+    queueMicrotask(() => runPlayFromUserGesture(true))
+  }
+
   return (
     <section className="py-20 px-4">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border border-purple-500/30 bg-purple-500/10 text-purple-300 mb-3">
@@ -79,14 +89,9 @@ export default function RecommendedWidget() {
         </div>
 
         <div className="grid lg:grid-cols-5 gap-6">
-          {/* Featured track big card */}
           <div className="lg:col-span-2">
             <div className="relative rounded-2xl overflow-hidden aspect-square bg-[var(--muted)] group">
-              {current.cover_url
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={current.cover_url} alt={current.title} className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center"><Music2 size={64} className="text-[var(--border)]" /></div>
-              }
+              <CoverArt track={current} className="w-full h-full" iconSize={64} alt={current.title} />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
               <div className="absolute bottom-0 left-0 right-0 p-5">
                 <p className="font-black text-xl text-white leading-tight line-clamp-2">{current.title}</p>
@@ -99,13 +104,13 @@ export default function RecommendedWidget() {
               </div>
               <div className="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
                 <button
-                  onClick={toggle}
+                  onClick={onToggle}
                   className={`w-16 h-16 rounded-full bg-white text-black flex items-center justify-center transition-transform shadow-xl ${isPlayerReady ? 'hover:scale-105' : 'opacity-70 cursor-wait'}`}
                 >
                   {!isPlayerReady ? <Loader2 size={28} className="animate-spin" /> : isPlaying ? <Pause size={28} /> : <Play size={28} className="ml-1" />}
                 </button>
                 <button
-                  onClick={next}
+                  onClick={onNext}
                   className="w-10 h-10 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
                 >
                   <SkipForward size={18} />
@@ -113,14 +118,13 @@ export default function RecommendedWidget() {
               </div>
             </div>
 
-            {/* Controls below cover */}
             <div className="flex items-center justify-between mt-4 px-1">
               <div>
                 <p className="font-bold text-sm line-clamp-1">{current.title}</p>
                 <p className="text-xs text-[var(--muted-foreground)]">{current.artist}</p>
               </div>
               <button
-                onClick={toggle}
+                onClick={onToggle}
                 className={`w-10 h-10 rounded-full bg-purple-600 text-white flex items-center justify-center transition-colors flex-shrink-0 ${isPlayerReady ? 'hover:bg-purple-500' : 'opacity-70 cursor-wait'}`}
               >
                 {!isPlayerReady ? <Loader2 size={16} className="animate-spin" /> : isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
@@ -128,7 +132,6 @@ export default function RecommendedWidget() {
             </div>
           </div>
 
-          {/* Track list */}
           <div className="lg:col-span-3 flex flex-col gap-1">
             {visible.map((t, i) => (
               <MiniTrack
@@ -137,7 +140,7 @@ export default function RecommendedWidget() {
                 index={i}
                 isActive={i === currentIndex}
                 isPlaying={isPlaying}
-                onPlay={() => playTrack(i)}
+                onPlay={() => onPlayTrack(i)}
               />
             ))}
             {playlist.length > 6 && (

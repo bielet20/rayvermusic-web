@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import PlayerProvider from '@/components/player/PlayerProvider'
 import './globals.css'
@@ -9,6 +9,14 @@ const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin']
 export const metadata: Metadata = {
   title: { default: 'Rayver Music', template: '%s | Rayver Music' },
   description: 'DJ & Productor. Música electrónica, techno y más. Únete a la comunidad.',
+  applicationName: 'Rayver Music',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'Rayver Music',
+    statusBarStyle: 'black-translucent',
+  },
+  formatDetection: { telephone: false },
   openGraph: {
     title: 'Rayver Music',
     description: 'DJ & Productor. Música electrónica, techno y más.',
@@ -19,6 +27,13 @@ export const metadata: Metadata = {
   },
   twitter: { card: 'summary_large_image', title: 'Rayver Music' },
   metadataBase: new URL('https://rayvermusic.com'),
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#a855f7',
 }
 
 const JSON_LD = {
