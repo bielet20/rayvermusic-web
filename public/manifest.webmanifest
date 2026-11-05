@@ -1,0 +1,20 @@
+{
+  "name": "Rayver Music",
+  "short_name": "Rayver",
+  "description": "DJ & Productor — música, comunidad y gramola",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0a0a",
+  "theme_color": "#a855f7",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/next.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
